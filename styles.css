@@ -169,15 +169,15 @@ pre {
     background:
         radial-gradient(circle at 30% 30%, #7fa6ef, #3e66b7 70%);
     box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.45);
-    overflow: hidden;
+    overflow: visible;
 }
 
 .sidebar__crest img {
-    width: 100%;
-    height: 100%;
+    width: 88%;
+    height: 88%;
     object-fit: contain;
     display: block;
-    image-rendering: auto;
+    image-rendering: pixelated;
 }
 
 .sidebar__intro,
