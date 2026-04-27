@@ -2143,17 +2143,27 @@ function renderNav() {
     }
 
     navRoot.innerHTML = Object.entries(grouped)
-        .map(([section, pages]) => `
-            <section class="nav-group">
-                <h2 class="nav-group__title">${escapeHtml(section)}</h2>
+        .map(([section, pages]) => {
+            const isCurrentSection = pages.some((page) => page.slug === state.slug);
+            const shouldOpen = isCurrentSection || Boolean(state.search.trim());
+
+            return `
+            <details class="nav-group" ${shouldOpen ? "open" : ""}>
+                <summary class="nav-group__title">
+                    <span class="nav-group__chevron" aria-hidden="true"></span>
+                    <span>${escapeHtml(section)}</span>
+                </summary>
+                <div class="nav-group__links">
                 ${pages.map((page) => `
                     <a class="nav-link ${page.slug === state.slug ? "is-active" : ""}" href="#${page.slug}">
+                        <span class="nav-link__icon" aria-hidden="true"></span>
                         <span class="nav-link__title">${escapeHtml(page.title)}</span>
-                        <span class="nav-link__summary">${escapeHtml(page.summary)}</span>
                     </a>
                 `).join("")}
-            </section>
-        `)
+                </div>
+            </details>
+        `;
+        })
         .join("");
 }
 
