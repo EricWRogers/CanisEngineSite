@@ -2090,6 +2090,19 @@ const sourceLink = document.getElementById("page-source-link");
 const searchField = document.getElementById("docs-search");
 const menuToggle = document.getElementById("menu-toggle");
 const sidebar = document.getElementById("sidebar");
+const themeToggle = document.getElementById("theme-toggle");
+
+function getTheme() {
+    return document.documentElement.dataset.theme === "dark" ? "dark" : "light";
+}
+
+function setTheme(theme) {
+    const nextTheme = theme === "dark" ? "dark" : "light";
+    document.documentElement.dataset.theme = nextTheme;
+    localStorage.setItem("canis-docs-theme", nextTheme);
+    themeToggle.setAttribute("aria-pressed", String(nextTheme === "dark"));
+    themeToggle.setAttribute("aria-label", `Switch to ${nextTheme === "dark" ? "light" : "dark"} theme`);
+}
 
 function groupPages(pages) {
     return pages.reduce((groups, page) => {
@@ -2241,11 +2254,16 @@ menuToggle.addEventListener("click", () => {
     menuToggle.setAttribute("aria-expanded", String(willOpen));
 });
 
+themeToggle.addEventListener("click", () => {
+    setTheme(getTheme() === "dark" ? "light" : "dark");
+});
+
 window.addEventListener("hashchange", () => {
     syncHash();
     closeSidebarOnSmallScreens();
 });
 
+setTheme(getTheme());
 renderNav();
 renderPage();
 syncHash();
