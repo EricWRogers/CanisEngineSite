@@ -336,6 +336,282 @@ python3 -m http.server 8000 --directory build-web-release/web</code></pre>
         `
     },
     {
+        slug: "roll-a-ball",
+        section: "Tutorials",
+        title: "Make Roll-A-Ball",
+        summary: "Build a small rolling-ball collection game using a sphere player, physics, pickups, tags, scripts, and a simple win condition.",
+        kicker: "Tutorials",
+        chips: ["Beginner", "Physics", "Scripts", "Scene Authoring"],
+        keywords: ["roll a ball", "roll-a-ball", "tutorial", "player controller", "pickup", "physics", "sphere", "rigidbody", "collider", "tag"],
+        content: `
+            <section>
+                <h2 id="goal">Goal</h2>
+                <p>In this tutorial you will make a small Roll-A-Ball scene: a sphere moves with WASD or arrow keys, jumps with Space, collects glowing pickups, and wins when every pickup is gone.</p>
+                <div class="doc-grid">
+                    <article class="doc-card">
+                        <h3>What you will build</h3>
+                        <p>A boxed-in arena with a rolling player ball, several pickup cubes, a camera, lighting, and a basic collection counter in the inspector/log.</p>
+                    </article>
+                    <article class="doc-card">
+                        <h3>What you will learn</h3>
+                        <p>How Canis scenes combine components, script registration, tags, physics bodies, sensors, models, and materials into a playable loop.</p>
+                    </article>
+                </div>
+                <figure class="doc-screenshot">
+                    <img src="./assets/screenshots/roll-a-ball-editor.png" alt="Canis editor showing the Roll-A-Ball scene with a blue player sphere, yellow pickups, and arena walls.">
+                    <figcaption>Roll-A-Ball in the Canis editor: a boxed arena, player sphere, and pickup cubes wired into one tutorial scene.</figcaption>
+                </figure>
+            </section>
+
+            <section>
+                <h2 id="starter-assets">Starter assets</h2>
+                <p>The project already includes enough default assets for a first version:</p>
+                <ul>
+                    <li><code>project/assets/defaults/models/sphere.glb</code> for the player.</li>
+                    <li><code>project/assets/defaults/models/cube.glb</code> for the floor, walls, and pickup blocks.</li>
+                    <li><code>project/assets/defaults/materials/default.material</code> or any simple material for grey scene geometry.</li>
+                    <li><code>project/assets/materials/pickup_gold.material</code> for the collectible pickups.</li>
+                </ul>
+                <p>The finished tutorial files live under <code>game/include/RollABall/</code> and <code>game/src/RollABall/</code>. Use them as a reference while you create the scripts below.</p>
+                <figure class="doc-screenshot">
+                    <img src="./assets/screenshots/roll-a-ball-assets.png" alt="Canis Assets panel with defaults models expanded to show cube.glb and sphere.glb, plus materials expanded to show pickup_gold.material.">
+                    <figcaption>Use the default <code>sphere.glb</code> and <code>cube.glb</code> models, then assign <code>pickup_gold.material</code> to each collectible.</figcaption>
+                </figure>
+            </section>
+
+            <section>
+                <h2 id="create-the-scene">Create the scene</h2>
+                <ol>
+                    <li>Create or open a scene for the tutorial. A good name is <code>roll_a_ball.scene</code>.</li>
+                    <li>Add a <strong>Camera</strong> and place it above and behind the arena, looking down toward the center.</li>
+                    <li>Add a <strong>DirectionalLight</strong> so the arena has readable shape.</li>
+                    <li>Add a large cube named <strong>Ground</strong>, scaled wide and flat.</li>
+                    <li>Add four thin cube walls around the edge so the ball cannot fall away immediately.</li>
+                </ol>
+                <p>For a simple first pass, use a ground scale around <code>[24, 1, 24]</code>, place it at <code>[0, -0.5, 0]</code>, and build walls from narrow cubes along the four sides.</p>
+                <figure class="doc-screenshot">
+                    <img src="./assets/screenshots/roll-a-ball-hierarchy.png" alt="Canis editor hierarchy showing Camera, Sun, Ground, four wall entities, Player, and Pickup_00 through Pickup_07.">
+                    <figcaption>The Roll-A-Ball scene hierarchy starts with a camera, sun, floor, four walls, one player, and a small set of numbered pickups.</figcaption>
+                </figure>
+            </section>
+
+            <section>
+                <h2 id="make-the-floor-solid">Make the floor solid</h2>
+                <p>The player will move through physics, so the arena needs colliders.</p>
+                <div class="component-entry">
+                    <h3 id="ground-components">Ground and wall components</h3>
+                    <ul class="component-meta">
+                        <li><strong>Transform:</strong> position and scale the cube into the shape you want.</li>
+                        <li><strong>Model:</strong> use <code>cube.glb</code>.</li>
+                        <li><strong>Material:</strong> choose a neutral material or color.</li>
+                        <li><strong>Rigidbody:</strong> set it to static so it acts like level geometry.</li>
+                        <li><strong>BoxCollider:</strong> keep the collider size matched to the cube.</li>
+                    </ul>
+                </div>
+                <p>Do the same for each wall. If the ball clips through something, check that the object has both a rigidbody and a collider.</p>
+            </section>
+
+            <section>
+                <h2 id="create-the-player-script">Create the player script</h2>
+                <p>Create a game script named <code>RollABall::PlayerController</code>. In the editor, use the <strong>Scripts</strong> panel to create <code>PlayerController</code> inside a <code>RollABall</code> folder, or create these files manually:</p>
+                <ul>
+                    <li><code>game/include/RollABall/PlayerController.hpp</code></li>
+                    <li><code>game/src/RollABall/PlayerController.cpp</code></li>
+                </ul>
+                <p>The header should declare the editable movement values and the runtime state the inspector will show while testing.</p>
+                <pre><code>namespace RollABall
+{
+    class PlayerController : public Canis::ScriptableEntity
+    {
+    public:
+        static constexpr const char* ScriptName = "RollABall::PlayerController";
+
+        float moveForce = 35.0f;
+        float jumpImpulse = 7.5f;
+        float groundCheckDistance = 0.75f;
+        Canis::Mask groundCollisionMask = Canis::Rigidbody::DefaultLayer;
+        bool logProgress = true;
+
+        int totalPickups = 0;
+        int collectedPickups = 0;
+        bool hasWon = false;
+        bool grounded = false;
+
+        explicit PlayerController(Canis::Entity& entity) : Canis::ScriptableEntity(entity) {}
+
+        void CollectPickup();
+        void Ready() override;
+        void Update(float dt) override;
+    };
+}</code></pre>
+                <p>In the source file, register the properties that should appear in the inspector, then require the components the movement code needs.</p>
+                <pre><code>REGISTER_PROPERTY(conf, RollABall::PlayerController, moveForce);
+REGISTER_PROPERTY(conf, RollABall::PlayerController, jumpImpulse);
+REGISTER_PROPERTY(conf, RollABall::PlayerController, groundCheckDistance);
+REGISTER_PROPERTY(conf, RollABall::PlayerController, groundCollisionMask);
+REGISTER_PROPERTY(conf, RollABall::PlayerController, logProgress);
+
+DEFAULT_CONFIG_AND_REQUIRED(conf, RollABall::PlayerController, Transform, Rigidbody);</code></pre>
+                <div class="doc-callout">
+                    <h3>Rebuild after adding scripts</h3>
+                    <p>After adding a new game script, rebuild the project so the generated registration file can include it. If the script does not appear in the Add Component menu, rebuild first.</p>
+                </div>
+            </section>
+
+            <section>
+                <h2 id="create-the-player">Create the player entity</h2>
+                <ol>
+                    <li>Add an entity named <strong>Player</strong>.</li>
+                    <li>Add <strong>Transform</strong> and place it above the floor, for example <code>[0, 1, 0]</code>.</li>
+                    <li>Add <strong>Model</strong> and assign <code>sphere.glb</code>.</li>
+                    <li>Add <strong>Material</strong> and pick a readable player color.</li>
+                    <li>Add <strong>Rigidbody</strong> and keep it dynamic.</li>
+                    <li>Add <strong>SphereCollider</strong>.</li>
+                    <li>Add the <strong>RollABall::PlayerController</strong> script.</li>
+                </ol>
+                <p>The player script expects <code>Transform</code> and <code>Rigidbody</code>. It reads keyboard input and applies force to the rigidbody each frame.</p>
+                <pre><code>DEFAULT_CONFIG_AND_REQUIRED(conf, RollABall::PlayerController, Transform, Rigidbody);</code></pre>
+                <div class="doc-screenshot-grid">
+                    <figure class="doc-screenshot">
+                        <img src="./assets/screenshots/roll-a-ball-player-create-menu.png" alt="Canis create menu open to add an empty 3D entity for the player.">
+                        <figcaption>Create an empty 3D entity for the player.</figcaption>
+                    </figure>
+                    <figure class="doc-screenshot">
+                        <img src="./assets/screenshots/roll-a-ball-player-empty-entity.png" alt="Canis hierarchy showing the newly created Player entity.">
+                        <figcaption>Name the entity <code>Player</code>.</figcaption>
+                    </figure>
+                    <figure class="doc-screenshot">
+                        <img src="./assets/screenshots/roll-a-ball-player-transform.png" alt="Canis inspector showing the Player transform positioned above the ground.">
+                        <figcaption>Move the transform above the floor.</figcaption>
+                    </figure>
+                    <figure class="doc-screenshot">
+                        <img src="./assets/screenshots/roll-a-ball-player-add-model.png" alt="Canis inspector showing the Add Component menu with the Model component selected.">
+                        <figcaption>Add a <code>Model</code> component.</figcaption>
+                    </figure>
+                    <figure class="doc-screenshot">
+                        <img src="./assets/screenshots/roll-a-ball-player-assign-sphere.png" alt="Canis editor assigning sphere.glb from the Assets panel to the Player model field.">
+                        <figcaption>Drag <code>sphere.glb</code> onto the model field.</figcaption>
+                    </figure>
+                    <figure class="doc-screenshot">
+                        <img src="./assets/screenshots/roll-a-ball-player-add-physics-script.png" alt="Canis Player inspector showing Rigidbody, SphereCollider, Material, Model, and RollABall::PlayerController components.">
+                        <figcaption>Add <code>Rigidbody</code>, <code>SphereCollider</code>, and <code>RollABall::PlayerController</code>.</figcaption>
+                    </figure>
+                </div>
+                <figure class="doc-screenshot">
+                    <img src="./assets/screenshots/roll-a-ball-player-inspector.png" alt="Canis editor showing the Player setup with Rigidbody, SphereCollider, Model, Material, and RollABall::PlayerController.">
+                    <figcaption>The finished Player setup should include physics, a sphere collider, rendering components, and the <code>RollABall::PlayerController</code> script with movement values exposed.</figcaption>
+                </figure>
+            </section>
+
+            <section>
+                <h2 id="tune-player-movement">Tune player movement</h2>
+                <p>The script exposes the most useful movement values in the inspector:</p>
+                <ul>
+                    <li><code>moveForce</code>: how strongly the ball accelerates.</li>
+                    <li><code>jumpImpulse</code>: upward impulse when Space is pressed.</li>
+                    <li><code>groundCheckDistance</code>: ray length used to decide if jumping is allowed.</li>
+                    <li><code>pickupRadius</code>: reserved for collection tuning if you extend the pickup behavior.</li>
+                    <li><code>logProgress</code>: prints collection progress to the log.</li>
+                </ul>
+                <p>A good first set of values is already in the script: <code>moveForce = 35</code>, <code>jumpImpulse = 7.5</code>, and <code>groundCheckDistance = 0.75</code>.</p>
+                <pre><code>if (input.GetKey(Key::A) || input.GetKey(Key::LEFT))
+    inputDirection.x -= 1.0f;
+
+if (grounded &amp;&amp; input.JustPressedKey(Key::SPACE))
+    rigidbody.AddForce(Vector3(0.0f, jumpImpulse, 0.0f), Rigidbody3DForceMode::IMPULSE);
+
+rigidbody.AddForce(movement * moveForce * _dt, Rigidbody3DForceMode::FORCE);</code></pre>
+            </section>
+
+            <section>
+                <h2 id="create-a-pickup">Create a pickup</h2>
+                <ol>
+                    <li>Add a cube entity named <strong>Pickup</strong>.</li>
+                    <li>Set its tag to <code>Pickup</code>. The player counts entities with this tag at startup.</li>
+                    <li>Scale it smaller than the player, for example <code>[0.6, 0.6, 0.6]</code>.</li>
+                    <li>Place it slightly above the floor.</li>
+                    <li>Add <strong>Model</strong> with <code>cube.glb</code>.</li>
+                    <li>Add <strong>Material</strong> with <code>pickup_gold.material</code>.</li>
+                    <li>Add <strong>Rigidbody</strong>, set it static, turn off gravity, and make it a sensor.</li>
+                    <li>Add <strong>BoxCollider</strong>.</li>
+                    <li>Add <strong>RollABall::PickupSpinner</strong>.</li>
+                </ol>
+                <p><code>PickupSpinner</code> rotates the pickup, pulses the material field, and destroys the pickup when the player enters its sensor collider.</p>
+            </section>
+
+            <section>
+                <h2 id="duplicate-pickups">Duplicate pickups</h2>
+                <p>Duplicate the pickup around the arena. Start with 8 to 12 pickups in a loose ring so the player has a readable goal.</p>
+                <div class="doc-callout">
+                    <h3>Keep the tag consistent</h3>
+                    <p>Every collectible must use the exact <code>Pickup</code> tag. <code>PlayerController</code> counts active pickup entities with that tag during <code>Ready()</code>.</p>
+                </div>
+                <pre><code>int PlayerController::CountActivePickups() const
+{
+    return entity.scene.GetEntitiesWithTag("Pickup").size();
+}</code></pre>
+            </section>
+
+            <section>
+                <h2 id="test-the-loop">Test the loop</h2>
+                <ol>
+                    <li>Save the scene.</li>
+                    <li>Press Play.</li>
+                    <li>Move with WASD or arrow keys.</li>
+                    <li>Hold Left Shift to sprint.</li>
+                    <li>Press Space to jump when grounded.</li>
+                    <li>Roll into each pickup and confirm it disappears.</li>
+                </ol>
+                <p>If <code>logProgress</code> is enabled, collection progress appears in the log. The script marks <code>hasWon</code> once collected pickups reaches total pickups.</p>
+                <pre><code>void PlayerController::CollectPickup()
+{
+    collectedPickups++;
+    hasWon = (collectedPickups &gt;= totalPickups);
+}</code></pre>
+            </section>
+
+            <section>
+                <h2 id="common-fixes">Common fixes</h2>
+                <article class="component-entry">
+                    <h3 id="ball-does-not-move">Ball does not move</h3>
+                    <ul class="component-meta">
+                        <li><strong>Script:</strong> confirm <code>RollABall::PlayerController</code> is attached to the player.</li>
+                        <li><strong>Physics:</strong> confirm the player has a dynamic <code>Rigidbody</code>.</li>
+                        <li><strong>Collider:</strong> confirm the player has a <code>SphereCollider</code>.</li>
+                    </ul>
+                </article>
+                <article class="component-entry">
+                    <h3 id="pickup-does-not-collect">Pickup does not collect</h3>
+                    <ul class="component-meta">
+                        <li><strong>Tag:</strong> confirm the pickup entity tag is exactly <code>Pickup</code>.</li>
+                        <li><strong>Sensor:</strong> confirm the pickup rigidbody is a sensor.</li>
+                        <li><strong>Collider:</strong> confirm the pickup has a <code>BoxCollider</code> and the player can overlap it.</li>
+                        <li><strong>Script:</strong> confirm <code>RollABall::PickupSpinner</code> is attached to the pickup.</li>
+                    </ul>
+                </article>
+                <article class="component-entry">
+                    <h3 id="jump-never-works">Jump never works</h3>
+                    <ul class="component-meta">
+                        <li><strong>Ground check:</strong> increase <code>groundCheckDistance</code> a little.</li>
+                        <li><strong>Mask:</strong> confirm <code>groundCollisionMask</code> can hit the ground layer.</li>
+                        <li><strong>Floor:</strong> confirm the ground has a collider and rigidbody.</li>
+                    </ul>
+                </article>
+            </section>
+
+            <section>
+                <h2 id="make-it-better">Make it better</h2>
+                <ul>
+                    <li>Add a UI text element that shows <code>collectedPickups / totalPickups</code>.</li>
+                    <li>Turn the pickup into a prefab so future pickups stay consistent.</li>
+                    <li>Add an <code>AnimationPlayer</code> or <code>Animator</code> to make pickups pulse more dramatically.</li>
+                    <li>Add a goal door that opens when <code>hasWon</code> becomes true.</li>
+                    <li>Build the scene for web once the native version feels good.</li>
+                </ul>
+            </section>
+        `
+    },
+    {
         slug: "engine-guide",
         section: "Core Manual",
         title: "Engine Guide",
@@ -2091,6 +2367,10 @@ const searchField = document.getElementById("docs-search");
 const menuToggle = document.getElementById("menu-toggle");
 const sidebar = document.getElementById("sidebar");
 const themeToggle = document.getElementById("theme-toggle");
+const lightbox = document.getElementById("image-lightbox");
+const lightboxImage = document.getElementById("image-lightbox-image");
+const lightboxCaption = document.getElementById("image-lightbox-caption");
+const lightboxClose = lightbox.querySelector(".image-lightbox__close");
 
 function getTheme() {
     return document.documentElement.dataset.theme === "dark" ? "dark" : "light";
@@ -2201,7 +2481,42 @@ function renderPage() {
         </nav>
     `;
 
+    enhanceDocImages();
     renderToc();
+}
+
+function enhanceDocImages() {
+    const images = pageRoot.querySelectorAll(".doc-screenshot img");
+    for (const image of images) {
+        image.tabIndex = 0;
+        image.setAttribute("role", "button");
+        image.setAttribute("aria-label", `Open larger view of ${image.alt || "this image"}`);
+    }
+}
+
+function getImageCaption(image) {
+    const figure = image.closest("figure");
+    const caption = figure ? figure.querySelector("figcaption") : null;
+    return caption ? caption.textContent.trim() : "";
+}
+
+function openLightbox(image) {
+    lightboxImage.src = image.currentSrc || image.src;
+    lightboxImage.alt = image.alt || "";
+    lightboxCaption.textContent = getImageCaption(image);
+    lightbox.classList.add("is-open");
+    lightbox.setAttribute("aria-hidden", "false");
+    document.body.classList.add("has-lightbox");
+    lightboxClose.focus();
+}
+
+function closeLightbox() {
+    lightbox.classList.remove("is-open");
+    lightbox.setAttribute("aria-hidden", "true");
+    document.body.classList.remove("has-lightbox");
+    lightboxImage.removeAttribute("src");
+    lightboxImage.alt = "";
+    lightboxCaption.textContent = "";
 }
 
 function renderToc() {
@@ -2266,6 +2581,30 @@ menuToggle.addEventListener("click", () => {
 
 themeToggle.addEventListener("click", () => {
     setTheme(getTheme() === "dark" ? "light" : "dark");
+});
+
+pageRoot.addEventListener("click", (event) => {
+    const image = event.target.closest(".doc-screenshot img");
+    if (!image) return;
+    openLightbox(image);
+});
+
+pageRoot.addEventListener("keydown", (event) => {
+    const image = event.target.closest(".doc-screenshot img");
+    if (!image || (event.key !== "Enter" && event.key !== " ")) return;
+    event.preventDefault();
+    openLightbox(image);
+});
+
+lightbox.addEventListener("click", (event) => {
+    if (!event.target.closest("[data-lightbox-close]")) return;
+    closeLightbox();
+});
+
+window.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && lightbox.classList.contains("is-open")) {
+        closeLightbox();
+    }
 });
 
 window.addEventListener("hashchange", () => {

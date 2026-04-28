@@ -71,6 +71,15 @@
         </main>
     </div>
 
+    <div class="image-lightbox" id="image-lightbox" aria-hidden="true">
+        <button class="image-lightbox__backdrop" type="button" data-lightbox-close aria-label="Close image preview"></button>
+        <div class="image-lightbox__dialog" role="dialog" aria-modal="true" aria-label="Image preview">
+            <button class="image-lightbox__close" type="button" data-lightbox-close>Close</button>
+            <img class="image-lightbox__image" id="image-lightbox-image" src="" alt="">
+            <p class="image-lightbox__caption" id="image-lightbox-caption"></p>
+        </div>
+    </div>
+
     <script src="./app.js"></script>
 </body>
 </html>
